@@ -1,0 +1,147 @@
+
+# Loading libraries
+
+library(readxl)
+library(pwr)
+library(WebPower)
+library(MarketMatching)
+library(plyr) 
+library(lubridate)
+library(tidyverse)
+
+## Importing the Great Wolf F&B test Planing data
+
+raw_data1 <- read_excel('C:/Users/efalo/OneDrive/Documents/SMU/SMU Docs/Spring Mod  A/Test & Learn/Great Wolf F&B test planning.xlsx',
+
+                         sheet = "Aggregated Monthly Sales ", 
+                        col_types = c("text", "date", "numeric", "numeric", "numeric"))
+head(raw_data1)
+
+# This data exclude Gurnee, New England, Southern California, Traverse City because they are missing some monthly sales data
+
+###### Marketing Matching - based on Burger Revenue ##########################################
+raw_data1$Month<-as.Date(raw_data1$Month)
+mama = best_matches(data=raw_data1,
+                  id_variable = "Property",
+                  date_variable = "Month",
+                  matching_variable = "Burger Revenue",
+                  warping_limit = 1,
+                  dtw_emphasis = 0, 
+                  suggest_market_splits = TRUE,
+                  matches = 6,
+                  start_match_period = "2021-01-01",
+                  end_match_period = "2021-12-01"
+)
+
+# Suggested market pairs
+head(mama$SuggestedTestControlSplits)
+
+# One Market was excluded from the splits, which wisconsin Dells.
+
+###### Calculating the power of the test ###################################################
+
+# Number of pairing = 6
+# Confidence = 95%
+# KPI = 10% change in Revenue
+
+# create a raw_data2 table that excludes Wisconsin Dells because it was not paired
+
+raw_data2 <- raw_data1[raw_data1$Property != 'Wisconsin Dells', ]
+
+# Historical Burger Revenue average and Standard Deviation - (that includes 12 markets in 2021)
+
+average12 = mean(raw_data2$`Burger Revenue`)
+standv12 = sd(raw_data2$`Burger Revenue`)
+
+# Calculating the lift = 10% change in revenue
+lift = 0.1*average12
+
+# Calculate effect size: d = lift/standard deviation
+d = lift/standv12
+
+# Calculating the power of the test - power = 0.1107
+
+pwr.t.test(n=6, # 6 pairs #* 12 months
+           d=d, # effect size
+           sig.level=.05, # 95% confidence level
+           type="paired",
+           alternative="greater")
+
+# Assuming 80% power, how many samples do we need to run the test?
+
+
+
+power.t.test(delta = lift,  # delta = minimum detectable lift (x1-bar - x2)
+             sd = standv12,     # sd = historical standard deviation
+             sig.level = 0.05, # 95% confidence
+             power = 0.8, # 80% power
+             type = c("two.sample"),    
+             alternative = c("two.sided")
+             )
+# We will need 403 samples per group (not feasible)
+
+###### Visualization##################################################################
+
+library(ggplot2)
+library(dplyr)
+
+## We could look at all markets monthly burger sales
+#gg0 = ggplot(temp, aes(x = Month, y = `Burger Revenue`, group = Property))
+#gg0 +
+# geom_line(aes(color = Property)) +
+# geom_point(aes(color = Property), size = 1) +
+# ggtitle("Monthly Burger Sales by Property")
+
+
+## Line graphs for each Test and Control pairs ##
+
+# Test:Atlanta, Control: Grand Mound - highest volume
+raw_data3 = filter(raw_data2, Property %in% c("Atlanta", "Grand Mound"))
+gg1 = ggplot(raw_data3, aes(x = Month, y = `Burger Revenue`, group = Property))
+gg1 +
+  geom_line(aes(color = Property)) +
+  geom_point(aes(color = Property), size = 1) +
+  ggtitle("Paired Markets -Monthly Burger Sales - Highest Volume")
+
+
+# Test: Kansas City, Control: Williamsburg ( - highest correlation) we are keeping this grapgh
+raw_data4 = filter(raw_data2, Property %in% c("Kansas City", "Williamsburg"))
+gg2 = ggplot(raw_data4, aes(x = Month, y = `Burger Revenue`, group = Property))
+gg2 +
+  geom_line(aes(color = Property)) +
+  geom_point(aes(color = Property), size = 1) +
+    ggtitle("Monthly Burger Sales: Best Correlated")
+
+# Test: Minnesota, Control: Poconos
+raw_data5 = filter(raw_data2, Property %in% c("Minnesota", "Poconos"))
+gg3 = ggplot(raw_data5, aes(x = Month, y = `Burger Revenue`, group = Property))
+gg3 +
+  geom_line(aes(color = Property)) +
+  geom_point(aes(color = Property), size = 1) +
+  ggtitle("Monthly Burger Sales: Paired")
+
+# Test: Concord, Control: Grapevine
+raw_data6= filter(raw_data2, Property %in% c("Concord", "Grapevine"))
+gg4 = ggplot(raw_data6, aes(x = Month, y = `Burger Revenue`, group = Property))
+gg4 +
+  geom_line(aes(color = Property)) +
+  geom_point(aes(color = Property), size = 1) +
+  ggtitle("Monthly Burger Sales: Paired Markets")
+
+
+# Test: Colorado Springs, Control: Sandusky
+raw_data7= filter(raw_data2, Property %in% c("Colorado Springs", "Sandusky"))
+gg5 = ggplot(raw_data7, aes(x = Month, y = `Burger Revenue`, group = Property))
+gg5 +
+  geom_line(aes(color = Property)) +
+  geom_point(aes(color = Property), size = 1) +
+  ggtitle("Monthly Burger Sales: Paired Markets")
+
+# Test: Mason Family Resorts, Control: Scottsdale   (keep the graph - worst correlation)
+raw_data8= filter(raw_data2, Property %in% c("Mason Family Resorts", "Scottsdale"))
+gg6 = ggplot(raw_data8, aes(x = Month, y = `Burger Revenue`, group = Property))
+gg6 +
+  geom_line(aes(color = Property)) +
+  geom_point(aes(color = Property), size = 1) +
+  ggtitle("Monthly Burger Sales:  Worst Correlated paired markets")
+
